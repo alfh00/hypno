@@ -1,4 +1,7 @@
+import glob
+import os
 import random
+import shutil
 import subprocess
 from pathlib import Path
 from pipeline.logger import get_logger
@@ -6,11 +9,47 @@ from pipeline.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _find_bin(name: str) -> str:
+    """
+    Resolve the full path of an ffmpeg/ffprobe binary.
+    Checks PATH first, then common Windows winget/install locations.
+    Raises FileNotFoundError with an install hint if not found.
+    """
+    found = shutil.which(name)
+    if found:
+        return found
+
+    # winget installs a shell alias under AppData\Local\Microsoft\WinGet\Links
+    winget_links = os.path.expandvars(rf"%LOCALAPPDATA%\Microsoft\WinGet\Links\{name}.exe")
+    if os.path.exists(winget_links):
+        return winget_links
+
+    # Common manual install locations on Windows
+    for pattern in [
+        rf"C:\ffmpeg\bin\{name}.exe",
+        rf"C:\Program Files\ffmpeg\bin\{name}.exe",
+        os.path.expandvars(rf"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\**\bin\{name}.exe"),
+    ]:
+        matches = glob.glob(pattern, recursive=True)
+        if matches:
+            return matches[0]
+
+    raise FileNotFoundError(
+        f"'{name}' not found. Install FFmpeg (winget install ffmpeg) "
+        "and open a new terminal so the PATH update takes effect."
+    )
+
+
+# Resolve once at module load — avoids PATH issues across shell sessions
+_FFPROBE = _find_bin("ffprobe")
+_FFMPEG  = _find_bin("ffmpeg")
+
+
 def get_audio_duration_seconds(path: Path) -> float:
     """Use ffprobe to get audio duration in seconds."""
     result = subprocess.run(
         [
-            "ffprobe", "-v", "error",
+            _FFPROBE, "-v", "error",
             "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1",
             str(path),
@@ -68,7 +107,7 @@ def mix_audio(voice_path: Path, output_path: Path, config: dict) -> Path:
     logger.info(f"Mixing audio — voice duration: {voice_duration:.1f}s")
 
     ffmpeg_cmd = [
-        "ffmpeg", "-y",
+        _FFMPEG, "-y",
         "-i", str(voice_path),
         "-stream_loop", "-1", "-i", str(ambient_track),
         "-filter_complex",

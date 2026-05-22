@@ -1,9 +1,27 @@
 import os
+import re
 import anthropic
 from pipeline.logger import get_logger
 from pipeline.topics import Session
 
 logger = get_logger(__name__)
+
+
+def _strip_llm_artifacts(text: str) -> str:
+    """
+    Remove chain-of-thought / planning blocks that some local LLMs leak into output.
+
+    Gemma models emit thinking blocks wrapped in <|channel>thought ... <channel|>.
+    Other models may use <think>...</think> or similar.
+    Everything before the first line of actual prose is removed.
+    """
+    # Gemma: <|channel>thought ... <channel|>
+    text = re.sub(r"<\|channel\>thought.*?<channel\|>", "", text, flags=re.DOTALL)
+    # Generic: <think>...</think>, <thinking>...</thinking>
+    text = re.sub(r"<think(?:ing)?>.*?</think(?:ing)?>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    # Any remaining <|...|> special tokens
+    text = re.sub(r"<\|[^|>]*\|>", "", text)
+    return text.strip()
 
 SYSTEM_PROMPT = """You are an expert hypnotherapist and somatic experiencing practitioner.
 You write deeply therapeutic hypnosis scripts for guided audio sessions.
@@ -76,7 +94,7 @@ def generate_script(session: Session, config: dict) -> str:
 
     logger.info(f"Generating script ({label}) for: {session.youtube_title}")
 
-    script     = call_fn(messages)
+    script     = _strip_llm_artifacts(call_fn(messages))
     word_count = len(script.split())
     logger.info(f"Script generated — {word_count} words")
 
@@ -127,7 +145,7 @@ def _quality_check(
             {"role": "user",      "content": continuation_prompt},
         ]
 
-        continuation = call_fn(messages)
+        continuation = _strip_llm_artifacts(call_fn(messages))
         script       = script.rstrip() + "\n\n" + continuation.lstrip()
         word_count   = len(script.split())
         logger.info(f"After continuation {attempt}: {word_count} words")

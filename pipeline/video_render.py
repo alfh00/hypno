@@ -1,6 +1,7 @@
 import os
 import subprocess
 from pathlib import Path
+from pipeline.audio_mix import _FFMPEG
 from pipeline.logger import get_logger
 
 # Font candidates for drawtext — fontconfig is broken on some Windows FFmpeg builds,
@@ -137,7 +138,7 @@ def render_video(audio_path: Path, output_path: Path, config: dict) -> Path:
     full_filter = gradient_filter + watermark_filter
 
     ffmpeg_cmd = [
-        "ffmpeg", "-y",
+        _FFMPEG, "-y",
         "-f", "lavfi",
         "-i", full_filter,
         "-i", str(audio_path),

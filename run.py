@@ -53,8 +53,10 @@ def run_pipeline(config: dict, force_type: str = None) -> dict:
     script_path = run_dir / "script.txt"
     script_path.write_text(script, encoding="utf-8")
 
-    voice_path = run_dir / "voice.mp3"
-    render_tts(script, voice_path, config)
+    # mock_tts generates a WAV file — real TTS produces MP3
+    voice_ext  = "wav" if config["pipeline"].get("mock_tts") else "mp3"
+    voice_path = run_dir / f"voice.{voice_ext}"
+    voice_path = render_tts(script, voice_path, config)  # returns actual path (may differ in mock)
 
     mixed_path = run_dir / "mixed.mp3"
     mix_audio(voice_path, mixed_path, config)
@@ -93,6 +95,15 @@ def main():
             "Configure endpoint in config.yaml [local_llm] or via LOCAL_LLM_BASE_URL / LOCAL_LLM_MODEL env vars."
         ),
     )
+    parser.add_argument(
+        "--mock-tts",
+        action="store_true",
+        help=(
+            "Skip ElevenLabs — generate a silent placeholder audio instead. "
+            "Use with --local to test the full video/thumbnail pipeline "
+            "without spending any API credits."
+        ),
+    )
     parser.add_argument("--config", default="./config.yaml", help="Config file path")
     args = parser.parse_args()
 
@@ -105,6 +116,10 @@ def main():
 
     if args.dry_run:
         config["pipeline"]["dry_run"] = True
+
+    if args.mock_tts:
+        config["pipeline"]["mock_tts"] = True
+        logger.info("Mock TTS mode: ElevenLabs skipped, placeholder audio generated.")
 
     try:
         run_pipeline(config, force_type=args.type)

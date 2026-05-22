@@ -1,6 +1,32 @@
+import os
 import subprocess
 from pathlib import Path
 from pipeline.logger import get_logger
+
+# Font candidates for drawtext — fontconfig is broken on some Windows FFmpeg builds,
+# so we resolve a fontfile path directly at runtime.
+_FONT_CANDIDATES = [
+    r"C:/Windows/Fonts/georgia.ttf",
+    r"C:/Windows/Fonts/times.ttf",
+    r"C:/Windows/Fonts/arial.ttf",
+    r"C:/Windows/Fonts/calibri.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",  # Linux
+    "/System/Library/Fonts/Supplemental/Georgia.ttf",     # macOS
+]
+
+
+def _ffmpeg_font_spec() -> str:
+    """
+    Return a drawtext fontfile= clause pointing to the first available font,
+    or an empty string (FFmpeg built-in fallback) if none are found.
+    """
+    for path in _FONT_CANDIDATES:
+        if os.path.exists(path):
+            # FFmpeg filter escaping: backslash-escape the colon in Windows drive letter
+            escaped = path.replace(":", "\\:")
+            return f":fontfile='{escaped}'"
+    logger.warning("No system font found for drawtext — using FFmpeg built-in fallback.")
+    return ""
 
 logger = get_logger(__name__)
 
@@ -105,7 +131,7 @@ def render_video(audio_path: Path, output_path: Path, config: dict) -> Path:
             f",drawtext=text='{wm_text}'"
             f":fontsize=48:fontcolor=white@{wm_opacity}"
             f":x=(w-text_w)/2:y=h-80"
-            f":font='serif':expansion=none"
+            f"{_ffmpeg_font_spec()}:expansion=none"
         )
 
     full_filter = gradient_filter + watermark_filter

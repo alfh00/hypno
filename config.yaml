@@ -57,7 +57,7 @@ topics:
         - morning intention
 
 voice:
-  elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel — warm, calm, meditative
+  elevenlabs_voice_id: "EXAVITQu4vr4xnSDxMaL"  # Sarah — mature, reassuring, confident
   model_id: eleven_v3                            # highest quality, full emotional range
   stability: 0.72
   similarity_boost: 0.75
@@ -85,7 +85,7 @@ script:
 # Override base_url and model via LOCAL_LLM_BASE_URL / LOCAL_LLM_MODEL env vars.
 local_llm:
   base_url: "http://localhost:1234/v1"   # LM Studio default
-  model: "local-model"                   # LM Studio: use the model name shown in the UI
+  model: "google/gemma-4-e4b"            # model currently loaded in LM Studio
   max_tokens: 6000
   api_key: "lm-studio"                   # ignored by local servers, required by openai library
 

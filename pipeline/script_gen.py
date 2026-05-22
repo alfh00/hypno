@@ -31,8 +31,8 @@ Style rules:
 
 def build_user_prompt(session: Session, config: dict) -> str:
     duration = config["pipeline"]["session_duration_minutes"]
-    style = config["script"]["induction_style"]
-    pacing = config["script"]["pacing_notes"]
+    style    = config["script"]["induction_style"]
+    pacing   = config["script"]["pacing_notes"]
 
     return f"""Write a {duration}-minute {style} hypnosis session for the following:
 
@@ -46,51 +46,127 @@ Pacing guidance:
 Begin the script now."""
 
 
+# ── Public entry point ────────────────────────────────────────────────────────
+
 def generate_script(session: Session, config: dict) -> str:
     """
-    Generate a hypnosis script.
-    Routes to the local LLM backend when config["pipeline"]["use_local_llm"] is True,
-    otherwise uses the Anthropic Claude API.
+    Generate a hypnosis script, with automatic quality checking and retry.
+
+    Routes to local LLM when config["pipeline"]["use_local_llm"] is True.
+    If the first response is too short (local LLMs often truncate long-form output),
+    sends a continuation prompt and concatenates the result — up to max_retries times.
+    Raises ValueError if the script is still below min_words after all retries.
     """
-    if config["pipeline"].get("use_local_llm"):
-        return _generate_local(session, config)
-    return _generate_anthropic(session, config)
+    use_local  = config["pipeline"].get("use_local_llm", False)
+    user_prompt = build_user_prompt(session, config)
+
+    # Messages list — Anthropic uses no system key here (passed separately in _call_anthropic)
+    # Local LLM includes system as the first message
+    if use_local:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": user_prompt},
+        ]
+        call_fn = lambda msgs: _call_local(msgs, config)
+        label   = "local"
+    else:
+        messages = [{"role": "user", "content": user_prompt}]
+        call_fn  = lambda msgs: _call_anthropic(msgs, config)
+        label    = "Claude"
+
+    logger.info(f"Generating script ({label}) for: {session.youtube_title}")
+
+    script     = call_fn(messages)
+    word_count = len(script.split())
+    logger.info(f"Script generated — {word_count} words")
+
+    script = _quality_check(script, word_count, messages, call_fn, config)
+    return script
+
+
+# ── Quality guard ─────────────────────────────────────────────────────────────
+
+def _quality_check(
+    script: str,
+    word_count: int,
+    messages: list[dict],
+    call_fn,
+    config: dict,
+) -> str:
+    """
+    If the script is below min_words, request a continuation and concatenate.
+    Retries up to max_retries times, then raises ValueError.
+    """
+    quality_cfg = config["script"].get("quality", {})
+    min_words   = quality_cfg.get("min_words", 1800)
+    max_retries = quality_cfg.get("max_retries", 2)
+    duration    = config["pipeline"]["session_duration_minutes"]
+    target_words = duration * 130  # ~130 wpm average for slow hypnotic speech
+
+    for attempt in range(1, max_retries + 1):
+        if word_count >= min_words:
+            break
+
+        logger.warning(
+            f"Script too short: {word_count} words "
+            f"(minimum: {min_words}, target: ~{target_words}). "
+            f"Requesting continuation — attempt {attempt}/{max_retries}."
+        )
+
+        continuation_prompt = (
+            f"The script above is only {word_count} words — too short for a "
+            f"{duration}-minute session (target: ~{target_words} words). "
+            "Continue writing directly from where the script ends. "
+            "Do not repeat, reintroduce, or summarise — just continue the "
+            "flowing prose seamlessly as if there was no interruption."
+        )
+
+        # Append the short script as the assistant turn, then ask to continue
+        messages = messages + [
+            {"role": "assistant", "content": script},
+            {"role": "user",      "content": continuation_prompt},
+        ]
+
+        continuation = call_fn(messages)
+        script       = script.rstrip() + "\n\n" + continuation.lstrip()
+        word_count   = len(script.split())
+        logger.info(f"After continuation {attempt}: {word_count} words")
+
+    if word_count < min_words:
+        raise ValueError(
+            f"Script quality check failed after {max_retries} retries: "
+            f"{word_count} words (minimum: {min_words}). "
+            "Try: increasing max_tokens, using a larger model, or lowering "
+            "script.quality.min_words in config.yaml."
+        )
+
+    logger.info(f"Script quality OK — {word_count} words (minimum: {min_words})")
+    return script
 
 
 # ── Anthropic backend ─────────────────────────────────────────────────────────
 
-def _generate_anthropic(session: Session, config: dict) -> str:
-    client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
-
-    logger.info(f"Generating script (Claude) for: {session.youtube_title}")
-
+def _call_anthropic(messages: list[dict], config: dict) -> str:
+    client = anthropic.Anthropic()
     message = client.messages.create(
         model=config["script"]["model"],
         max_tokens=config["script"]["max_tokens"],
         system=SYSTEM_PROMPT,
-        messages=[
-            {"role": "user", "content": build_user_prompt(session, config)}
-        ],
+        messages=messages,
     )
-
-    script = message.content[0].text
-    logger.info(f"Script generated — {len(script.split())} words")
-    return script
+    return message.content[0].text
 
 
 # ── Local LLM backend (LM Studio / Ollama / any OpenAI-compatible server) ────
 
-def _generate_local(session: Session, config: dict) -> str:
+def _call_local(messages: list[dict], config: dict) -> str:
     """
-    Uses the openai library pointed at a local OpenAI-compatible server.
+    Calls a local OpenAI-compatible server.
 
     LM Studio defaults:  base_url = http://localhost:1234/v1
     Ollama defaults:      base_url = http://localhost:11434/v1
 
-    Priority order for settings:
-      1. Environment variables  (LOCAL_LLM_BASE_URL, LOCAL_LLM_MODEL)
-      2. config.yaml local_llm section
-      3. Built-in defaults (LM Studio)
+    Priority: env vars > config.yaml > built-in defaults (LM Studio)
     """
     try:
         from openai import OpenAI
@@ -101,30 +177,18 @@ def _generate_local(session: Session, config: dict) -> str:
         )
 
     local_cfg = config.get("local_llm", {})
-    base_url = os.getenv(
-        "LOCAL_LLM_BASE_URL",
-        local_cfg.get("base_url", "http://localhost:1234/v1"),  # LM Studio default
-    )
-    model = os.getenv(
-        "LOCAL_LLM_MODEL",
-        local_cfg.get("model", "local-model"),
-    )
+    base_url  = os.getenv("LOCAL_LLM_BASE_URL", local_cfg.get("base_url", "http://localhost:1234/v1"))
+    model     = os.getenv("LOCAL_LLM_MODEL",    local_cfg.get("model", "local-model"))
     max_tokens = local_cfg.get("max_tokens", config["script"].get("max_tokens", 6000))
-    api_key = os.getenv("LOCAL_LLM_API_KEY", local_cfg.get("api_key", "lm-studio"))
+    api_key   = os.getenv("LOCAL_LLM_API_KEY",  local_cfg.get("api_key", "lm-studio"))
 
     client = OpenAI(base_url=base_url, api_key=api_key)
 
-    logger.info(f"Generating script (local: {model} @ {base_url}) for: {session.youtube_title}")
+    logger.info(f"Calling local LLM: {model} @ {base_url}")
 
     response = client.chat.completions.create(
         model=model,
         max_tokens=max_tokens,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_user_prompt(session, config)},
-        ],
+        messages=messages,
     )
-
-    script = response.choices[0].message.content
-    logger.info(f"Local script generated — {len(script.split())} words")
-    return script
+    return response.choices[0].message.content

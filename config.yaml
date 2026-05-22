@@ -71,6 +71,9 @@ script:
   max_tokens: 6000                            # raised — 25-min script needs ~4500-5000 tokens
   induction_style: ericksonian
   language: en
+  quality:
+    min_words: 1800      # ~14 min at 130 wpm — pipeline aborts below this after retries
+    max_retries: 2       # continuation attempts before raising an error
   pacing_notes: >
     Use long pauses marked as [pause] between key phrases.
     Sentences should be short and rhythmic in the deepening phase.

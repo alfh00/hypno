@@ -26,6 +26,17 @@ def render_tts(script: str, output_path: Path, config: dict) -> Path:
     # [pause] → inline SSML break — ElevenLabs accepts <break> without a <speak> wrapper
     text = script.replace("[pause]", '<break time="2.5s"/>')
 
+    # ElevenLabs /convert hard limit is 5000 chars.
+    # TODO: replace with multi-chunk stitched TTS once basic flow is confirmed working.
+    if len(text) > 4800:
+        cut = text.rfind(". ", 0, 4800)
+        cut = (cut + 1) if cut != -1 else 4800
+        logger.warning(
+            f"Script is {len(text)} chars — truncating to {cut} for ElevenLabs 5000-char limit. "
+            "Chunked TTS will be added next."
+        )
+        text = text[:cut]
+
     logger.info(f"Rendering TTS — voice: {voice_cfg['elevenlabs_voice_id']}, model: {voice_cfg['model_id']}")
 
     audio = client.text_to_speech.convert(

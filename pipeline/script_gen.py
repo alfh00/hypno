@@ -139,9 +139,12 @@ def _quality_check(
             "flowing prose seamlessly as if there was no interruption."
         )
 
-        # Append the short script as the assistant turn, then ask to continue
+        # Use only the last ~600 chars of the script as context for the assistant turn.
+        # Sending the full script blows up the context window of small local models
+        # (e.g. Gemma 4b). The tail gives enough context to continue naturally.
+        script_tail = script[-600:].lstrip()
         messages = messages + [
-            {"role": "assistant", "content": script},
+            {"role": "assistant", "content": script_tail},
             {"role": "user",      "content": continuation_prompt},
         ]
 

@@ -1,0 +1,30 @@
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+youtube_token.json
+client_secret.json
+
+# ── Generated output ──────────────────────────────────────────────────────────
+output/
+logs/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+*.code-workspace
+
+# Keep asset placeholder
+!assets/audio/.gitkeep

@@ -1,0 +1,136 @@
+pipeline:
+  session_duration_minutes: 25
+  short_clip_duration_seconds: 58
+  output_dir: ./output
+  dry_run: false
+
+topics:
+  rotation_strategy: weighted_random
+  sessions:
+    - name: deep_sleep
+      weight: 3
+      youtube_title_template: "Deep Sleep Hypnosis — {theme} | Drift"
+      tags: [sleep hypnosis, deep sleep, insomnia relief, guided sleep, relaxation]
+      theme_variants:
+        - release the day
+        - letting go of tension
+        - drifting into stillness
+        - body scan for sleep
+
+    - name: anxiety_release
+      weight: 3
+      youtube_title_template: "Anxiety Release Hypnosis — {theme} | Drift"
+      tags: [anxiety relief, stress release, hypnosis for anxiety, calm, nervous system reset]
+      theme_variants:
+        - releasing what you cannot control
+        - softening the grip of worry
+        - returning to safety
+        - unwinding the nervous system
+
+    - name: somatic_release
+      weight: 2
+      youtube_title_template: "Somatic Release Session — {theme} | Drift"
+      tags: [somatic healing, body release, trauma release, somatic experiencing, nervous system]
+      theme_variants:
+        - releasing stored tension
+        - completing the stress cycle
+        - body wisdom
+        - gentle discharge
+
+    - name: confidence_reset
+      weight: 1
+      youtube_title_template: "Confidence Hypnosis — {theme} | Drift"
+      tags: [confidence hypnosis, self worth, mindset, success hypnosis, identity]
+      theme_variants:
+        - returning to your natural power
+        - clearing old stories
+        - embodying your future self
+        - inner authority
+
+    - name: morning_activation
+      weight: 1
+      youtube_title_template: "Morning Reset Hypnosis — {theme} | Drift"
+      tags: [morning hypnosis, energy, motivation, morning routine, focus]
+      theme_variants:
+        - setting the tone for the day
+        - activating clarity and purpose
+        - morning intention
+
+voice:
+  elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel — warm, calm, meditative
+  model_id: eleven_v3                            # highest quality, full emotional range
+  stability: 0.72
+  similarity_boost: 0.75
+  style: 0.30
+  speed: 0.88                                    # slightly slower = more hypnotic delivery
+  use_speaker_boost: true
+  output_format: mp3_44100_128
+
+script:
+  model: claude-sonnet-4-6                    # Claude Sonnet 4.6
+  max_tokens: 6000                            # raised — 25-min script needs ~4500-5000 tokens
+  induction_style: ericksonian
+  language: en
+  pacing_notes: >
+    Use long pauses marked as [pause] between key phrases.
+    Sentences should be short and rhythmic in the deepening phase.
+    Use sensory language: weight, warmth, breath, gravity.
+    Avoid clinical or instructional tone — speak as if whispering beside them.
+
+# ── Local LLM (used with: python run.py --local) ─────────────────────────────
+# Any OpenAI-compatible server works: LM Studio, Ollama, llama.cpp, etc.
+# Override base_url and model via LOCAL_LLM_BASE_URL / LOCAL_LLM_MODEL env vars.
+local_llm:
+  base_url: "http://localhost:1234/v1"   # LM Studio default
+  model: "local-model"                   # LM Studio: use the model name shown in the UI
+  max_tokens: 6000
+  api_key: "lm-studio"                   # ignored by local servers, required by openai library
+
+audio:
+  ambient_dir: ./assets/audio
+  ambient_volume_db: -22
+  voice_volume_db: 0
+  fade_in_seconds: 4
+  fade_out_seconds: 8
+  crossfade_ms: 500
+
+video:
+  width: 1920
+  height: 1080
+  fps: 24
+  gradient_colors:
+    bottom: "#F5A94A"
+    lower_mid: "#E07B3F"
+    mid: "#C45A6A"
+    upper_mid: "#7B4FA6"
+    top: "#13102B"
+  particle_count: 40
+  particle_opacity: 0.18
+  logo_watermark: true
+  watermark_text: "DRIFT"
+  watermark_opacity: 0.25
+
+youtube:
+  category_id: "22"
+  privacy_status: public
+  default_language: en
+  description_template: |
+    {session_title}
+
+    Let this session guide you into deep rest and release.
+    Use headphones for the best experience.
+    Find a comfortable position and allow yourself to drift.
+
+    ——
+
+    Drift creates guided hypnosis and somatic relaxation sessions
+    to support nervous system recovery, deep sleep, and inner calm.
+
+    🎧 Best experienced with headphones
+    🌙 Ideal before sleep or during a break
+
+    #hypnosis #relaxation #deepsleep #somatichealing #guidedmeditation
+
+tiktok:
+  enabled: false
+  caption_template: "30 seconds to start releasing tension 🌙 Full session on YouTube → link in bio #hypnosis #relaxation #nervousystem"
